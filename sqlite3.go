@@ -1029,6 +1029,7 @@ func (d *SQLiteDriver) Open(dsn string) (driver.Conn, error) {
 
 	// PRAGMA's
 	encryptKey := ""
+	cipher_page_size := 0
 	cipher_compatibility := -1
 	autoVacuum := -1
 	busyTimeout := 5000
@@ -1054,6 +1055,15 @@ func (d *SQLiteDriver) Open(dsn string) (driver.Conn, error) {
 		// _key
 		if val := params.Get("_key"); val != "" {
 			encryptKey = val
+		}
+
+		// _cipher_page_size
+		if val := params.Get("_cipher_page_size"); val != "" {
+			size, err := strconv.ParseInt(val, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("Invalid _cipher_page_size: %v: %v", val, err)
+			}
+			cipher_page_size = int(size)
 		}
 
 		// _cipher_compatibility
@@ -1424,6 +1434,16 @@ func (d *SQLiteDriver) Open(dsn string) (driver.Conn, error) {
 	// The key pragma should be always called first
 	if encryptKey != "" {
 		if err := exec(fmt.Sprintf(`PRAGMA key = "%s";`, encryptKey)); err != nil {
+			C.sqlite3_close_v2(db)
+			return nil, err
+		}
+	}
+
+	// Cipher Page Size
+	// The cipher_page_size pragma should be called immediately after if provided
+	if cipher_page_size > 0 {
+		err := exec(fmt.Sprintf("PRAGMA cipher_page_size = %d;", cipher_page_size))
+		if err != nil {
 			C.sqlite3_close_v2(db)
 			return nil, err
 		}
